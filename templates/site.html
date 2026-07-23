@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Welcome back</h1>
+        <p class="subtitle">Real-time traffic classification across Tamil Nadu highways</p>
+    </div>
+    <a href="/upload" class="btn-accent">
+        <i class="bi bi-plus-lg"></i> New Upload
+    </a>
+</div>
+
+{% if is_running %}
+<!-- ========== LIVE PROCESSING STATE ========== -->
+<div class="card-clean" style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%); color:#fff; border:none; margin-bottom:16px; position:relative; overflow:hidden;">
+    <div style="position:absolute;top:-30px;right:-30px;width:140px;height:140px;background:rgba(255,255,255,0.06);border-radius:50%;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;position:relative;z-index:1;">
+        <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.15em;opacity:0.85;font-weight:600;margin-bottom:6px;">
+                <span style="display:inline-block;width:8px;height:8px;background:#fff;border-radius:50%;margin-right:6px;animation:pulse 1.5s infinite;"></span>
+                Live · Processing Now
+            </div>
+            <h2 style="font-size:22px;font-weight:700;margin:0;word-break:break-all;">{{ current_video }}</h2>
+            <div style="font-size:13px;opacity:0.85;margin-top:4px;">
+                <i class="bi bi-camera-video"></i> {{ current_camera }} &nbsp;·&nbsp; <i class="bi bi-geo-alt"></i> {{ current_location }}
+            </div>
+        </div>
+        <a href="/progress" class="btn-quiet" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">
+            <i class="bi bi-arrow-up-right"></i> Open Live View
+        </a>
+    </div>
+</div>
+
+<div class="row g-3" style="margin-bottom:28px;">
+    <div class="col-lg-4">
+        <div class="card-clean text-center" style="padding:36px 28px;height:100%;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:var(--text-light);font-weight:600;margin-bottom:8px;">Live Vehicle Count</div>
+            <div id="liveTotal" style="font-size:72px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:var(--accent);font-variant-numeric:tabular-nums;">0</div>
+            <div id="updateTs" style="margin-top:14px;font-size:12px;color:var(--text-light);">Waiting…</div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card-clean" style="height:100%;">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);margin-bottom:16px;">
+                <i class="bi bi-bar-chart-fill" style="color:var(--accent);"></i> Live Breakdown
+            </div>
+            <canvas id="liveChart" style="max-height:220px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 18px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--warn);">
+    <i class="bi bi-info-circle" style="font-size:18px;"></i>
+    Reports become available after processing completes. Download from the <a href="/files" style="color:var(--warn);text-decoration:underline;">Files page</a>.
+</div>
+
+<script>
+let chartInstance = null;
+function fmt(n){return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+
+function updateLive(){
+    fetch("/progress/status").then(r=>r.json()).then(data=>{
+        if(!data.running && data.video){ location.reload(); return; }
+        document.getElementById("liveTotal").innerText = fmt(data.total_count||0);
+        document.getElementById("updateTs").innerText = "Updated: "+new Date().toLocaleTimeString();
+
+        const counts = data.vehicle_counts||{};
+        const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+        if(!entries.length) return;
+
+        const labels = entries.map(e=>e[0]);
+        const vals = entries.map(e=>e[1]);
+        const greens = labels.map((_,i)=>`hsl(${145-i*8},${65-i*3}%,${38+i*3}%)`);
+
+        if(chartInstance){
+            chartInstance.data.labels = labels;
+            chartInstance.data.datasets[0].data = vals;
+            chartInstance.data.datasets[0].backgroundColor = greens;
+            chartInstance.update();
+        } else {
+            const ctx = document.getElementById("liveChart").getContext("2d");
+            chartInstance = new Chart(ctx, {
+                type: "bar",
+                data: { labels, datasets: [{ data: vals, backgroundColor: greens, borderRadius: 6 }] },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    },
+                    animation: { duration: 400 }
+                }
+            });
+        }
+    }).catch(e=>console.error(e));
+}
+updateLive();
+setInterval(updateLive, 2000);
+</script>
+
+{% else %}
+<!-- ========== IDLE STATE ========== -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="bi bi-collection-play"></i></div>
+        <div class="stat-label">Videos Processed</div>
+        <div class="stat-value">{{ total_files or 0 }}</div>
+        <div class="stat-meta">Total registered for detection</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#fff7ed;color:var(--warn);"><i class="bi bi-pause-circle"></i></div>
+        <div class="stat-label">Detection Status</div>
+        <div class="stat-value" style="color:var(--text-light);font-size:22px;">Idle</div>
+        <div class="stat-meta">No video processing right now</div>
+    </div>
+    <div class="stat-card" style="border-color:#d1fae5;background:linear-gradient(135deg,#fff 0%,#f0faf4 100%);">
+        <div class="stat-icon" style="background:#d1fae5;color:#047857;"><i class="bi bi-shield-check"></i></div>
+        <div class="stat-label">System Status</div>
+        <div class="stat-value" style="color:#047857;font-size:22px;">Online</div>
+        <div class="stat-meta">All services running</div>
+    </div>
+</div>
+
+<div class="card-clean">
+    <h2 style="font-size:16px;font-weight:700;margin:0 0 18px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);">Quick Actions</h2>
+    <div class="row g-3">
+        {% for icon, label, desc, href in [
+            ("bi-search","Lookup Records","Search detection results by date and camera","/lookup"),
+            ("bi-cloud-upload","Upload Video","Register footage for vehicle detection","/upload"),
+            ("bi-folder2-open","Browse Files","View all uploaded videos and download reports","/files")
+        ] %}
+        <div class="col-md-4">
+            <a href="{{ href }}" style="text-decoration:none;color:inherit;">
+                <div style="border:1px solid var(--border);border-radius:10px;padding:20px;transition:all 0.15s ease;height:100%;"
+                     onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-2px)';"
+                     onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)';">
+                    <i class="bi {{ icon }}" style="font-size:24px;color:var(--accent);margin-bottom:10px;display:block;"></i>
+                    <div style="font-weight:700;margin-bottom:4px;">{{ label }}</div>
+                    <div style="font-size:13px;color:var(--text-light);">{{ desc }}</div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

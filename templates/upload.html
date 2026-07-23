@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Upload Video{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Upload Video</h1>
+        <p class="subtitle">Register video footage for automated traffic detection</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card-clean">
+            <form method="post" action="/upload">
+                <div class="mb-4">
+                    <label class="form-label">Video File Name</label>
+                    <input type="text" class="form-control" name="video_name" placeholder="e.g. forest_1.mp4" required>
+                    <div class="form-hint"><i class="bi bi-info-circle"></i> File must already exist in the <b>videos/</b> folder</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <label class="form-label">Camera ID</label>
+                        <input type="text" class="form-control" name="camera" placeholder="e.g. cam1" required>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" name="location" placeholder="e.g. forest_vandalur" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <label class="form-label">Phase (optional)</label>
+                        <select class="form-select" name="phase">
+                            <option value="" selected>None</option>
+                            <option value="Phase-1">Phase-1</option>
+                            <option value="Phase-2">Phase-2</option>
+                            <option value="Day">Day</option>
+                            <option value="Night">Night</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <label class="form-label">Recording Start Date &amp; Time</label>
+                        <input type="datetime-local" class="form-control" name="startDateTime" required>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button type="submit" class="btn-accent"><i class="bi bi-play-fill"></i> Start Detection</button>
+                    <button type="reset" class="btn-quiet">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        {% if live.running %}
+        <div class="card-clean" style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%);color:#fff;border:none;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-30px;right:-30px;width:140px;height:140px;background:rgba(255,255,255,0.06);border-radius:50%;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.15em;opacity:0.85;font-weight:600;margin-bottom:6px;">
+                    <span style="display:inline-block;width:8px;height:8px;background:#fff;border-radius:50%;margin-right:6px;animation:pulse 1.5s infinite;"></span>
+                    Live · Processing Now
+                </div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:14px;word-break:break-all;opacity:0.95;">{{ live.video }}</div>
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.12em;opacity:0.8;font-weight:600;margin-bottom:4px;">Vehicles Detected</div>
+                <div id="liveTotalUpload" style="font-size:48px;font-weight:800;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;">{{ "{:,}".format(live.total_count) }}</div>
+                <div style="font-size:12px;opacity:0.8;margin-top:8px;">{{ live.camera }} · {{ live.location }}</div>
+            </div>
+        </div>
+        <div class="card-clean mt-3">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);margin-bottom:12px;"><i class="bi bi-bar-chart-fill" style="color:var(--accent);"></i> Live Breakdown</div>
+            <canvas id="uploadChart" style="max-height:200px;"></canvas>
+        </div>
+        <script>
+        let upChart = null;
+        function fmt(n){return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+        function pollUpload(){
+            fetch("/progress/status").then(r=>r.json()).then(data=>{
+                if(!data.running){location.reload();return;}
+                document.getElementById("liveTotalUpload").innerText = fmt(data.total_count||0);
+                const entries = Object.entries(data.vehicle_counts||{}).sort((a,b)=>b[1]-a[1]);
+                if(!entries.length) return;
+                const labels = entries.map(e=>e[0]);
+                const vals = entries.map(e=>e[1]);
+                const greens = labels.map((_,i)=>`hsl(${145-i*8},${65-i*3}%,${38+i*3}%)`);
+                if(upChart){
+                    upChart.data.labels=labels; upChart.data.datasets[0].data=vals;
+                    upChart.data.datasets[0].backgroundColor=greens; upChart.update();
+                } else {
+                    upChart = new Chart(document.getElementById("uploadChart").getContext("2d"),{
+                        type:"bar",
+                        data:{labels,datasets:[{data:vals,backgroundColor:greens,borderRadius:6}]},
+                        options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{beginAtZero:true,ticks:{precision:0}}},animation:{duration:400}}
+                    });
+                }
+            });
+        }
+        pollUpload(); setInterval(pollUpload,2000);
+        </script>
+        {% else %}
+        <div class="card-clean" style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%);color:#fff;border:none;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-30px;right:-30px;width:140px;height:140px;background:rgba(255,255,255,0.06);border-radius:50%;"></div>
+            <div style="position:relative;z-index:1;">
+                <i class="bi bi-camera-video" style="font-size:36px;opacity:0.8;"></i>
+                <h3 style="font-size:18px;font-weight:700;margin:14px 0 8px;">Ready for detection</h3>
+                <p style="font-size:13px;opacity:0.85;margin:0;">Drop your video in the <code style="background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:4px;">videos/</code> folder, fill the form, and start. Live counts will appear here during processing.</p>
+            </div>
+        </div>
+        <div class="card-clean mt-3">
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+                <div style="width:40px;height:40px;background:#fff7ed;color:var(--warn);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-exclamation-triangle" style="font-size:18px;"></i></div>
+                <div>
+                    <div style="font-weight:700;margin-bottom:4px;">Supported Formats</div>
+                    <div style="font-size:13px;color:var(--text-light);">MP4, MOV, AVI, MKV. Max recommended size: 2 GB.</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

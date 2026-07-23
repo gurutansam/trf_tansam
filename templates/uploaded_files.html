@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Files{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Uploaded Files</h1>
+        <p class="subtitle">Per-video detection counts · Download reports for completed videos</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <span id="refreshNote" style="font-size:12px;color:var(--text-light);"></span>
+        <a href="/upload" class="btn-accent"><i class="bi bi-plus-lg"></i> New Upload</a>
+    </div>
+</div>
+
+<div class="card-clean no-pad">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Camera</th>
+                    <th>Location</th>
+                    <th>Recorded At</th>
+                    <th class="text-end">Total Count</th>
+                    <th class="text-end">Status</th>
+                    <th class="text-end">Reports</th>
+                    <th class="text-end">Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if files %}
+                {% for f in files %}
+                <tr>
+                    <td>
+                        <i class="bi bi-file-earmark-play" style="color:var(--accent);margin-right:6px;"></i>
+                        <b style="word-break:break-all;">{{ f.fileName }}</b>
+                    </td>
+                    <td><span class="pill pill-info">{{ f.camera }}</span></td>
+                    <td>{{ f.location }}</td>
+                    <td style="color:var(--text-light);font-size:13px;font-variant-numeric:tabular-nums;">{{ f.startDATE }}</td>
+                    <td class="text-end">
+                        <span style="font-weight:700;color:var(--accent);font-size:15px;font-variant-numeric:tabular-nums;">
+                            {{ "{:,}".format(f.total_count) }}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        {% if f.status == 'COMPLETED' %}
+                            <span class="pill pill-complete"><i class="bi bi-check-circle"></i> Completed</span>
+                        {% elif f.status == 'PROCESSING' %}
+                            <span class="pill pill-warn"><i class="bi bi-arrow-repeat"></i> Processing</span>
+                        {% else %}
+                            <span class="pill pill-info">{{ f.status or 'Unknown' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div style="display:inline-flex;gap:6px;">
+                        {% if f.status == 'PROCESSING' %}
+                            <span class="btn-pill-red disabled" title="Available after processing completes">
+                                <i class="bi bi-file-earmark-pdf"></i> PDF
+                            </span>
+                            <span class="btn-pill-green disabled" title="Available after processing completes">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </span>
+                        {% else %}
+                            <a href="/file_pdf/{{ f.id }}" class="btn-pill-red">
+                                <i class="bi bi-file-earmark-pdf"></i> PDF
+                            </a>
+                            <a href="/file_excel/{{ f.id }}" class="btn-pill-green">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </a>
+                        {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <button class="btn-pill-grey" onclick="confirmDelete({{ f.id }})" title="Delete this file and its detection data">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr><td colspan="8">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <div style="font-weight:600;color:var(--text);margin-bottom:4px;">No files uploaded yet</div>
+                        <div style="font-size:13px;margin-bottom:14px;">Get started by uploading your first video</div>
+                        <a href="/upload" class="btn-accent" style="display:inline-flex;">
+                            <i class="bi bi-cloud-upload"></i> Upload Video
+                        </a>
+                    </div>
+                </td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if files %}
+<div style="margin-top:14px;font-size:12px;color:var(--text-light);display:flex;align-items:center;gap:8px;">
+    <i class="bi bi-info-circle"></i>
+    Counts cover detections from each video's start time until the next video's start time (same camera+location).
+    Deleting a file also removes all its detection records from the database.
+</div>
+{% endif %}
+
+<script>
+// Auto-refresh every 5s if any file is still PROCESSING
+{% set has_processing = files | selectattr("status", "equalto", "PROCESSING") | list | length %}
+{% if has_processing > 0 %}
+let countdown = 5;
+function tick(){
+    document.getElementById("refreshNote").innerText = "Auto-refresh in " + countdown + "s";
+    countdown--;
+    if(countdown < 0){
+        location.reload();
+    } else {
+        setTimeout(tick, 1000);
+    }
+}
+tick();
+{% endif %}
+</script>
+
+{% endblock %}

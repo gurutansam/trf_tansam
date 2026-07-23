@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Processing{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Live Detection</h1>
+        <p class="subtitle">Real-time vehicle counts · Updates every 2 seconds</p>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);display:flex;align-items:center;gap:6px;">
+        <span style="display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 0 3px rgba(34,197,94,0.2);animation:pulse 1.5s infinite;"></span> Live
+    </div>
+</div>
+
+<div class="card-clean" style="margin-bottom:16px;">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;"><i class="bi bi-file-earmark-play"></i> Video</div>
+            <div style="font-weight:600;word-break:break-all;">{{ video or "—" }}</div>
+        </div>
+        <div class="col-md-4">
+            <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;"><i class="bi bi-camera-video"></i> Camera</div>
+            <div style="font-weight:600;">{{ camera or "—" }}</div>
+        </div>
+        <div class="col-md-4">
+            <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;"><i class="bi bi-geo-alt"></i> Location</div>
+            <div style="font-weight:600;">{{ location or "—" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card-clean text-center" style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%);color:#fff;border:none;padding:36px 28px;">
+            <div style="width:64px;height:64px;margin:0 auto 18px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;">
+                <i class="bi bi-cpu" style="font-size:28px;"></i>
+            </div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.15em;opacity:0.85;font-weight:600;margin-bottom:8px;">Live Total</div>
+            <div id="liveTotal" style="font-size:64px;font-weight:800;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;">0</div>
+            <div id="statusText" style="margin-top:14px;font-size:13px;opacity:0.85;">Starting...</div>
+            <div class="progress mx-auto mt-4" style="height:6px;border-radius:4px;max-width:200px;background:rgba(255,255,255,0.15);">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%;background:rgba(255,255,255,0.6);"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card-clean" style="height:100%;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);"><i class="bi bi-bar-chart-fill" style="color:var(--accent);"></i> Live Chart</div>
+                <span id="updateTs" style="font-size:11px;color:var(--text-light);">Waiting…</span>
+            </div>
+            <canvas id="progressChart" style="max-height:240px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 18px;margin-top:24px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--warn);">
+    <i class="bi bi-info-circle" style="font-size:18px;"></i>
+    Reports will be downloadable from the <a href="/files" style="color:var(--warn);text-decoration:underline;">Files page</a> once detection completes.
+</div>
+
+<div class="d-flex gap-2 mt-3">
+    <a href="/files" class="btn-quiet"><i class="bi bi-folder2"></i> View All Files</a>
+    <a href="/site" class="btn-quiet"><i class="bi bi-grid"></i> Dashboard</a>
+</div>
+
+<script>
+let pgChart = null;
+function fmt(n){return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+
+function updateProgress(){
+    fetch("/progress/status").then(r=>r.json()).then(data=>{
+        if(!data.running && data.video){
+            document.getElementById("statusText").innerText = "Detection completed! Redirecting…";
+            setTimeout(()=>location.href="/files", 1500);
+            return;
+        }
+        document.getElementById("liveTotal").innerText = fmt(data.total_count||0);
+        document.getElementById("statusText").innerText = data.message||"Running…";
+        document.getElementById("updateTs").innerText = "Updated: "+new Date().toLocaleTimeString();
+
+        const entries = Object.entries(data.vehicle_counts||{}).sort((a,b)=>b[1]-a[1]);
+        if(!entries.length) return;
+        const labels = entries.map(e=>e[0]);
+        const vals = entries.map(e=>e[1]);
+        const greens = labels.map((_,i)=>`hsl(${145-i*7},${65-i*2}%,${38+i*3}%)`);
+        if(pgChart){
+            pgChart.data.labels=labels; pgChart.data.datasets[0].data=vals;
+            pgChart.data.datasets[0].backgroundColor=greens; pgChart.update();
+        } else {
+            pgChart = new Chart(document.getElementById("progressChart").getContext("2d"),{
+                type:"bar",
+                data:{labels,datasets:[{data:vals,backgroundColor:greens,borderRadius:6}]},
+                options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11},maxRotation:30}},y:{beginAtZero:true,ticks:{precision:0}}},animation:{duration:400}}
+            });
+        }
+    }).catch(e=>console.error(e));
+}
+updateProgress();
+setInterval(updateProgress, 2000);
+</script>
+{% endblock %}

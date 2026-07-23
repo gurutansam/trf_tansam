@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Lookup{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Lookup Records</h1>
+        <p class="subtitle">Search detection records by date, time, camera, and location</p>
+    </div>
+</div>
+
+<div class="card-clean">
+    <form action="/results" method="post">
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-calendar-event"></i> Start Date</label>
+                <input type="date" class="form-control" name="start_date" required>
+            </div>
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-calendar-event"></i> End Date</label>
+                <input type="date" class="form-control" name="end_date" required>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-clock"></i> From Time</label>
+                <input type="time" class="form-control" name="from_time" step="1" required>
+            </div>
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-clock"></i> To Time</label>
+                <input type="time" class="form-control" name="to_time" step="1" required>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-camera-video"></i> Camera</label>
+                <input type="text" class="form-control" name="camera" placeholder="e.g. cam1" required>
+            </div>
+            <div class="col-md-6 mb-4">
+                <label class="form-label"><i class="bi bi-geo-alt"></i> Location</label>
+                <input type="text" class="form-control" name="location" placeholder="e.g. forest_vandalur" required>
+            </div>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <button type="submit" class="btn-accent"><i class="bi bi-search"></i> Search Records</button>
+            <button type="reset" class="btn-quiet">Clear</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

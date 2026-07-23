@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Results{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Detection Results</h1>
+        <p class="subtitle">Vehicle classification records</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <form action="/download_pdf" method="post" class="m-0">
+            <input type="hidden" name="start_date" value="{{ start_date }}">
+            <input type="hidden" name="end_date" value="{{ end_date }}">
+            <input type="hidden" name="from_time" value="{{ from_time }}">
+            <input type="hidden" name="to_time" value="{{ to_time }}">
+            <input type="hidden" name="camera" value="{{ camera }}">
+            <input type="hidden" name="location" value="{{ location }}">
+            <button class="btn-pill-red" style="padding:8px 16px;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>
+        </form>
+        <form action="/download_excel" method="post" class="m-0">
+            <input type="hidden" name="start_date" value="{{ start_date }}">
+            <input type="hidden" name="end_date" value="{{ end_date }}">
+            <input type="hidden" name="from_time" value="{{ from_time }}">
+            <input type="hidden" name="to_time" value="{{ to_time }}">
+            <input type="hidden" name="camera" value="{{ camera }}">
+            <input type="hidden" name="location" value="{{ location }}">
+            <button class="btn-pill-green" style="padding:8px 16px;">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- INFO CARDS -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="bi bi-camera-video"></i></div>
+        <div class="stat-label">Camera</div>
+        <div class="stat-value" style="font-size:18px;">{{ camera }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="bi bi-geo-alt"></i></div>
+        <div class="stat-label">Location</div>
+        <div class="stat-value" style="font-size:18px;">{{ location }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+        <div class="stat-label">Duration</div>
+        <div class="stat-value" style="font-size:13px;line-height:1.4;">{{ duration }}</div>
+    </div>
+    <div class="stat-card" style="border-color:var(--accent);background:linear-gradient(135deg,#fff 0%,#f0faf4 100%);">
+        <div class="stat-icon" style="background:var(--accent);color:#fff;"><i class="bi bi-check-lg"></i></div>
+        <div class="stat-label">Total Vehicles</div>
+        <div class="stat-value" style="color:var(--accent);">{{ "{:,}".format(total_count) }}</div>
+    </div>
+</div>
+
+{% if vehicle_counts %}
+<!-- CHART + CARDS side-by-side -->
+<div class="row g-4">
+
+    <!-- BAR CHART -->
+    <div class="col-lg-7">
+        <div class="card-clean" style="height:100%;">
+            <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);margin-bottom:16px;">
+                <i class="bi bi-bar-chart-fill" style="color:var(--accent);"></i> Vehicle Classification Chart
+            </div>
+            <canvas id="resultsChart" style="max-height:280px;"></canvas>
+        </div>
+    </div>
+
+    <!-- COUNT CARDS -->
+    <div class="col-lg-5">
+        <div class="card-clean" style="height:100%;">
+            <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);margin-bottom:16px;">
+                <i class="bi bi-list-columns-reverse" style="color:var(--accent);"></i> Per-Category Counts
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:280px;">
+                {% set max_v = vehicle_list[0][1] if vehicle_list else 1 %}
+                {% for k, v in vehicle_list %}
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px;">
+                        <span style="font-weight:500;color:var(--text);">{{ k }}</span>
+                        <span style="font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;">{{ "{:,}".format(v) }}</span>
+                    </div>
+                    <div style="height:6px;background:#f1f3ee;border-radius:4px;overflow:hidden;">
+                        <div style="height:100%;background:linear-gradient(90deg,var(--accent) 0%,#34d399 100%);width:{{ (v / max_v * 100) | round(1) }}%;border-radius:4px;"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- VEHICLE COUNT TILES -->
+<div class="card-clean mt-4">
+    <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-light);margin-bottom:16px;">
+        <i class="bi bi-grid-3x3-gap" style="color:var(--accent);"></i> Summary
+    </div>
+    <div class="row g-3">
+        {% for k, v in vehicle_counts.items() %}
+        <div class="col-md-3 col-sm-4 col-6">
+            <div style="border:1px solid var(--border);border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px;">{{ k }}</div>
+                <div style="font-size:26px;font-weight:800;color:var(--accent);line-height:1;">{{ "{:,}".format(v) }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+(function(){
+    const labels = {{ vehicle_list | map(attribute=0) | list | tojson }};
+    const data   = {{ vehicle_list | map(attribute=1) | list | tojson }};
+    const greens = labels.map((_,i)=>`hsl(${145-i*7},${65-i*2}%,${38+i*3}%)`);
+    const ctx = document.getElementById("resultsChart").getContext("2d");
+    new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets:[{ data, backgroundColor: greens, borderRadius: 6 }] },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 30 } },
+                y: { beginAtZero: true, ticks: { precision: 0 } }
+            }
+        }
+    });
+})();
+</script>
+
+{% else %}
+<div class="card-clean">
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px;">No records found</div>
+        <div style="font-size:13px;">Try adjusting your date range, camera, or location filters</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="/" class="btn-quiet"><i class="bi bi-arrow-left"></i> Back to Lookup</a>
+</div>
+
+{% endblock %}

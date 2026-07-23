@@ -1,0 +1,11 @@
+__pycache__/
+venv/
+*.pt
+*.db
+output/
+videos/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv

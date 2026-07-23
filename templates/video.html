@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block breadcrumb %}Video Playback{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="accent-bar"></span>
+        <h1>Video Playback</h1>
+    </div>
+</div>
+
+<div class="card-clean no-pad" style="overflow:hidden;">
+    <video controls width="100%" style="display:block;background:#000;">
+        <source src="{{ video_path }}" type="video/mp4">
+    </video>
+</div>
+
+<div class="mt-4">
+    <a href="/files" class="btn-quiet"><i class="bi bi-arrow-left"></i> Back to Files</a>
+</div>
+
+{% endblock %}

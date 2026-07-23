@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Dashboard | TN Highways</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --accent: #0d6e3f; --accent-light: #e8f5ee; --accent-dark: #0a5530;
+            --sidebar: #0f1c14; --sidebar-text: #b8c8be;
+            --bg: #f7f8f5; --card: #ffffff;
+            --text: #15201a; --text-light: #5d6b62; --border: #e4e8e3;
+            --warn: #c2410c; --info: #1e40af;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; display: flex; }
+
+        /* SIDEBAR */
+        .sidebar { width: 240px; min-height: 100vh; background: var(--sidebar); color: var(--sidebar-text); padding: 24px 0; position: sticky; top: 0; display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar .brand { padding: 0 22px 24px; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+        .sidebar .brand img { height: 40px; width: 40px; object-fit: contain; background: #fff; padding: 4px; border-radius: 8px; }
+        .sidebar .brand-name { color: #fff; font-weight: 700; font-size: 15px; line-height: 1.2; }
+        .sidebar .brand-sub { color: var(--sidebar-text); font-size: 11px; opacity: 0.7; letter-spacing: 0.04em; }
+        .sidebar .nav-section { padding: 20px 16px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.35); font-weight: 600; }
+        .sidebar .nav-link-item { display: flex; align-items: center; gap: 12px; padding: 11px 22px; color: var(--sidebar-text); text-decoration: none; font-size: 14px; font-weight: 500; border-left: 3px solid transparent; transition: all 0.15s ease; margin: 1px 0; }
+        .sidebar .nav-link-item i { font-size: 17px; width: 20px; text-align: center; }
+        .sidebar .nav-link-item:hover { background: rgba(255,255,255,0.04); color: #fff; }
+        .sidebar .nav-link-item.active { background: rgba(13,110,63,0.15); color: #fff; border-left-color: var(--accent); }
+        .sidebar .sidebar-footer { margin-top: auto; padding: 20px 22px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; color: rgba(255,255,255,0.4); }
+        .sidebar .status-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 0 3px rgba(34,197,94,0.2); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* MAIN */
+        .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .main-header { background: #fff; border-bottom: 1px solid var(--border); padding: 16px 36px; display: flex; justify-content: space-between; align-items: center; }
+        .breadcrumb-trail { font-size: 13px; color: var(--text-light); display: flex; align-items: center; gap: 8px; }
+        .breadcrumb-trail .current { color: var(--text); font-weight: 600; }
+        .header-right { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text-light); }
+        .header-right img { height: 32px; }
+        .content { flex: 1; padding: 32px 36px; max-width: 1200px; width: 100%; }
+
+        /* PAGE */
+        .page-header { margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
+        .page-header h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.02em; }
+        .page-header .subtitle { color: var(--text-light); font-size: 14px; margin: 0; }
+        .page-header .accent-bar { display: inline-block; width: 32px; height: 3px; background: var(--accent); border-radius: 2px; margin-bottom: 12px; }
+        .card-clean { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+        .card-clean.no-pad { padding: 0; }
+
+        /* FORMS */
+        .form-label { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .form-control, .form-select { font-size: 14px; font-family: inherit; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fafbf8; }
+        .form-control:focus, .form-select:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(13,110,63,0.1); }
+        .form-hint { font-size: 12px; color: var(--text-light); margin-top: 5px; }
+
+        /* BUTTONS */
+        .btn-accent { background: var(--accent); border: none; color: #fff; font-weight: 600; padding: 12px 28px; border-radius: 8px; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s ease; text-decoration: none; cursor: pointer; }
+        .btn-accent:hover { background: var(--accent-dark); color: #fff; transform: translateY(-1px); }
+        .btn-quiet { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 500; padding: 10px 20px; border-radius: 8px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .btn-quiet:hover { background: #fafbf8; border-color: var(--accent); color: var(--accent); }
+        .btn-pill-red { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; text-decoration: none; cursor: pointer; }
+        .btn-pill-red:hover { background: #fee2e2; color: #b91c1c; }
+        .btn-pill-red.disabled { opacity: 0.4; pointer-events: none; }
+        .btn-pill-green { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; text-decoration: none; cursor: pointer; }
+        .btn-pill-green:hover { background: #d1fae5; color: #047857; }
+        .btn-pill-green.disabled { opacity: 0.4; pointer-events: none; }
+        .btn-pill-grey { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+        .btn-pill-grey:hover { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+
+        /* STATS */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 22px; position: relative; overflow: hidden; }
+        .stat-card .stat-icon { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border-radius: 8px; background: var(--accent-light); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .stat-card .stat-label { font-size: 12px; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 6px; }
+        .stat-card .stat-value { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+        .stat-card .stat-meta { font-size: 12px; color: var(--text-light); margin-top: 8px; }
+
+        /* TABLES */
+        .table { font-size: 14px; margin: 0; }
+        .table thead th { background: #fafbf8; color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); padding: 14px 16px; }
+        .table tbody td { padding: 13px 16px; vertical-align: middle; border-bottom: 1px solid #f1f3ee; }
+        .table tbody tr:hover { background: #fafbf8; }
+
+        /* TABS */
+        .nav-tabs { border-bottom: 1px solid var(--border); gap: 4px; }
+        .nav-tabs .nav-link { color: var(--text-light); border: none; font-weight: 600; padding: 12px 20px; font-size: 14px; margin-bottom: -1px; background: transparent; }
+        .nav-tabs .nav-link.active { color: var(--accent); border-bottom: 2px solid var(--accent); background: transparent; }
+
+        /* PILLS */
+        .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .pill-accent { background: var(--accent-light); color: var(--accent-dark); }
+        .pill-warn { background: #fff7ed; color: var(--warn); }
+        .pill-info { background: #eff6ff; color: var(--info); }
+        .pill-complete { background: #ecfdf5; color: #047857; }
+
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--text-light); }
+        .empty-state i { font-size: 40px; color: var(--border); display: block; margin-bottom: 12px; }
+
+        /* CONFIRM MODAL */
+        .confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; }
+        .confirm-overlay.show { display: flex; }
+        .confirm-box { background: #fff; border-radius: 12px; padding: 28px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .confirm-box h4 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+        .confirm-box p { font-size: 14px; color: var(--text-light); margin-bottom: 24px; }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; min-height: auto; position: static; padding: 14px; flex-direction: row; align-items: center; overflow-x: auto; }
+            .sidebar .brand { padding: 0 12px 0 0; border: none; border-right: 1px solid rgba(255,255,255,0.08); margin-right: 8px; }
+            .sidebar .brand-name, .sidebar .brand-sub, .sidebar .nav-section, .sidebar .sidebar-footer { display: none; }
+            .sidebar .nav-link-item { padding: 8px 12px; border-left: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+            .sidebar .nav-link-item.active { border-left-color: transparent; border-bottom-color: var(--accent); }
+            .content { padding: 20px; }
+            .main-header { padding: 12px 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <a href="/site" class="brand">
+        <img src="{{ url_for('static', filename='images/tansam_logo.png') }}" alt="">
+        <div>
+            <div class="brand-name">TN Highways</div>
+            <div class="brand-sub">Traffic Intelligence</div>
+        </div>
+    </a>
+    <div class="nav-section d-none d-md-block">Main</div>
+    <a href="/site" class="nav-link-item {% if request.path == '/site' %}active{% endif %}">
+        <i class="bi bi-grid"></i> <span>Dashboard</span>
+    </a>
+    <a href="/lookup" class="nav-link-item {% if request.path == '/lookup' or request.path == '/results' %}active{% endif %}">
+        <i class="bi bi-search"></i> <span>Lookup</span>
+    </a>
+    <a href="/upload" class="nav-link-item {% if request.path == '/upload' or request.path == '/progress' %}active{% endif %}">
+        <i class="bi bi-cloud-upload"></i> <span>Upload Video</span>
+    </a>
+    <a href="/files" class="nav-link-item {% if request.path == '/files' %}active{% endif %}">
+        <i class="bi bi-folder2"></i> <span>Files</span>
+    </a>
+    <div class="sidebar-footer d-none d-md-block">
+        <span class="status-dot"></span> System Online<br>
+        <span style="opacity:0.6;">v1.0 · TN Highways Dept.</span>
+    </div>
+</aside>
+
+<div class="main">
+    <header class="main-header">
+        <div class="breadcrumb-trail">
+            <i class="bi bi-house"></i><span>/</span>
+            <span class="current">{% block breadcrumb %}Dashboard{% endblock %}</span>
+        </div>
+        <div class="header-right">
+
+            <span class="d-none d-md-inline">
+                Welcome, {{ session.get('name', 'User') }}
+            </span>
+        
+            <a href="/logout"
+               style="
+               text-decoration:none;
+               background:#b91c1c;
+               color:white;
+               padding:8px 14px;
+               border-radius:8px;
+               font-size:13px;
+               font-weight:600;
+               display:flex;
+               align-items:center;
+               gap:6px;
+               ">
+                <i class="bi bi-box-arrow-right"></i>
+                Logout
+            </a>
+        
+        </div>
+    </header>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="confirm-overlay" id="deleteOverlay">
+    <div class="confirm-box">
+        <h4 style="color:#b91c1c;">⚠ Confirm Delete</h4>
+        <p>This will permanently delete this file entry <b>and all its detection records</b> from the database. This cannot be undone.</p>
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button class="btn-quiet" onclick="closeDelete()">Cancel</button>
+            <form id="deleteForm" method="post" style="margin:0;">
+                <button type="submit" class="btn-accent" style="background:#b91c1c;">Yes, Delete</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(fileId) {
+    document.getElementById("deleteForm").action = "/delete_file/" + fileId;
+    document.getElementById("deleteOverlay").classList.add("show");
+}
+function closeDelete() {
+    document.getElementById("deleteOverlay").classList.remove("show");
+}
+document.getElementById("deleteOverlay").addEventListener("click", function(e) {
+    if (e.target === this) closeDelete();
+});
+</script>
+
+</body>
+</html>
