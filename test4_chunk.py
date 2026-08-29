@@ -43,8 +43,8 @@ TRACKER            = "botsort.yaml"
 IMG_SIZE           = 640
 
 NEW_WIDTH, NEW_HEIGHT = 1080, 720
-CONF_THRES        = 0.10
-HIGH_CONF_THRES   = 0.30
+CONF_THRES        = 0.05
+HIGH_CONF_THRES   = 0.20
 CLASS_DOMINANCE   = 0.7
 MIN_CLASS_VOTES   = 8
 MIN_STABLE_FRAMES = 5
@@ -233,15 +233,29 @@ def process_chunk():
                             db_batcher.add(event_time, best_class, camera, phase, location)
                             next_id += 1
 
-                    # ── BOUNDING BOX only (no count overlay) ──
                     if writer and tid in permanent_ids and track_max_conf[tid] >= HIGH_CONF_THRES:
                         label = f"ID:{permanent_ids[tid]} {best_class}"
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         cv2.putText(frame, label, (x1, max(20, y1-8)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-            # Write frame — NO count overlay text here
+            # ===== CHUNK VEHICLE COUNT =====
             if writer:
+                y = 30
+
+                for k, v in total_counts.items():
+                    if v > 0:
+                        cv2.putText(
+                            frame,
+                            f"{k} - {v}",
+                            (15, y),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (255, 255, 255),
+                            2
+                        )
+                        y += 25
+
                 writer.write(frame)
 
             if processed % prog_step == 0:
