@@ -1,42 +1,46 @@
 # 🚦 Tamil Nadu Highways — Automated Traffic Detection System
 
-An AI-powered traffic detection and vehicle classification system built for the Tamil Nadu Highways Department. Operators upload highway surveillance videos; the system detects, tracks, and counts vehicles by class using a fine-tuned YOLO model accelerated with TensorRT, then exports reports for department use.
+An AI-powered traffic detection and vehicle classification system built for the **Tamil Nadu Highways Department**. Operators upload highway surveillance videos; the system detects, tracks, and counts vehicles by class using a fine-tuned YOLO model accelerated with **TensorRT** on an NVIDIA RTX 3060, then exports reports as PDF or Excel for department analytics.
 
 ---
 
 ## ✨ Features
 
-- 🚗 Detects and classifies multiple vehicle types (2-wheelers to 5+ axle trucks)
-- ⚡ **3× parallel chunk processing** — 1-hour video processed in ~25 minutes
-- 📊 Live dashboard with real-time count chart during processing
-- 📁 Export results as **PDF or Excel** reports
-- 🎬 Annotated output video with bounding boxes + cumulative count overlay
-- 🔐 Session-based login (admin / operator roles)
-- 🗄️ SQLite database with full detection history
+- 🚗 **Multi-Class Vehicle Classification**: Detects and classifies 27 vehicle categories (2-wheelers, cars, buses, rigid trucks, trailer trucks, LCVs, etc.).
+- ⚡ **High-Speed TensorRT Acceleration**: Runs at **~4.3 ms per frame (~230 FPS)** on an NVIDIA RTX 3060 GPU.
+- 🔀 **Parallel Chunk Processing**: Automatically partitions videos into parallel chunks for 3–5× speedups.
+- 🎬 **End-to-End Automated Pipeline**: Chunk detection, SQLite logging, video concatenation, and cumulative counter overlay execute end-to-end automatically.
+- 📐 **Aspect-Ratio Preservation**: Automatically preserves native 16:9 surveillance aspect ratios without vertical stretching or distortion.
+- 📊 **Live Dashboard & Progress**: Real-time vehicle count analytics and live charts during detection.
+- 📁 **Instant Exports**: One-click **PDF** (ReportLab) and **Excel** (OpenPyXL) summary and detailed logs.
+- 🔐 **Secure Authentication**: Session-based login with hashed passwords and protected routes.
+- 🧱 **Modular Architecture**: Built with Flask Blueprints, application factory, and dedicated service layers.
 
 ---
 
 ## 🏗️ System Architecture
 
-```
-User uploads video
+```text
+User uploads video to videos/
         ↓
-Flask (app.py) → inserts DB row (status=PROCESSING)
+Flask UI (/upload) → inserts DB row (status=PROCESSING)
         ↓
-worker.py splits video into 3 time-based chunks
+worker.py splits video into parallel chunks
         ↓
-3 parallel Python processes (test4_chunk.py)
-  Chunk 1 → frames 0–20 min   → output/video_chunk1.mp4
-  Chunk 2 → frames 20–40 min  → output/video_chunk2.mp4
-  Chunk 3 → frames 40–60 min  → output/video_chunk3.mp4
-  All 3 write detections to SQLite simultaneously
+Parallel Python processes (test4_chunk.py)
+  Chunk 1 → frames 0–33%   → output/video_chunk1.mp4
+  Chunk 2 → frames 33–66%  → output/video_chunk2.mp4
+  Chunk 3 → frames 66–100% → output/video_chunk3.mp4
+  All chunks stream detections to SQLite (WAL mode)
         ↓
-All chunks done → worker marks status=COMPLETED
+All chunks finish successfully
         ↓
-fix_count_overlay.py (post-processing):
-  FFmpeg merges 3 chunks (no re-encode, ~5–10 sec)
-  Renders cumulative count overlay (0 → total)
+worker.py automatically triggers fix_count_overlay.py:
+  1. Fast FFmpeg stream concat (no re-encoding)
+  2. Renders high-contrast cumulative count card overlay (0 → total)
   → output/video_FINAL.mp4
+        ↓
+worker.py marks DB status as COMPLETED
 ```
 
 ---
@@ -45,67 +49,87 @@ fix_count_overlay.py (post-processing):
 
 | Layer | Technology |
 |---|---|
-| Web UI | Flask + Bootstrap 5 + Chart.js |
-| Database | SQLite (WAL mode) |
-| AI Detection | YOLO11s + BotSort tracker |
-| GPU Acceleration | TensorRT (RTX 3060 12GB) |
-| Video Processing | OpenCV + FFmpeg |
+| **Web UI** | Flask 3.1 + Bootstrap 5 + Chart.js + Jinja2 |
+| **Architecture** | Flask Blueprints + Application Factory Pattern |
+| **Database** | SQLite (WAL mode, busy timeout, thread-safe batching) |
+| **AI Detection** | YOLO11s + BotSort Tracker |
+| **GPU Acceleration** | TensorRT 10.16 (FP16 Tensor Cores, RTX 3060 12GB) |
+| **Video Processing** | OpenCV + FFmpeg |
+| **Reports** | ReportLab (PDF) + OpenPyXL (Excel) |
 
 ---
 
 ## ⚙️ Detection Configuration
 
-These values are tuned for accuracy and should not be changed without re-validation:
+Tuned in `test4_chunk.py` for maximum accuracy, noise reduction, and high throughput:
 
 ```python
-CONF_THRES        = 0.10   # Detection confidence threshold
-HIGH_CONF_THRES   = 0.30   # High-confidence classification threshold
-CLASS_DOMINANCE   = 0.7    # Minimum vote share for class assignment
-MIN_CLASS_VOTES   = 8      # Minimum votes to assign a class
-MIN_STABLE_FRAMES = 5      # Frames required before counting
-MIN_DISPLACEMENT  = 7      # Minimum pixel movement to confirm motion
-COUNT_Y_MIN       = 0.20   # Top of counting zone (% of frame height)
-COUNT_Y_MAX       = 0.99   # Bottom of counting zone
-TRACKER           = botsort.yaml
+CONF_THRES        = 0.15   # Detection threshold (filters background noise, speeds up tracker)
+HIGH_CONF_THRES   = 0.30   # High-confidence threshold required before counting
+CLASS_DOMINANCE   = 0.70   # Dominant class vote ratio required (70% consensus)
+MIN_CLASS_VOTES   = 6      # Minimum detection votes before counting
+MIN_STABLE_FRAMES = 5      # History frames for trajectory confirmation
+MIN_DISPLACEMENT  = 8      # Minimum pixel movement to filter stationary artifacts
+COUNT_Y_MIN       = 0.40   # Upper boundary of counting zone (% of frame height)
+COUNT_Y_MAX       = 0.95   # Lower boundary of counting zone
+MAX_OUT_WIDTH     = 1280   # Max video output width (preserves aspect ratio)
+MAX_OUT_HEIGHT    = 720    # Max video output height
+TRACKER           = "botsort.yaml"
 ```
 
 ---
 
 ## 📁 Project Structure
 
-```
-trf/
-├── app.py                  # Flask web server — all routes and UI logic
-├── worker.py               # Launches 3 parallel detection subprocesses
-├── test4_chunk.py          # Detection script — processes one chunk
-├── fix_count_overlay.py    # Merges chunks + renders cumulative overlay
-├── best.engine             # TensorRT compiled YOLO model (fast) ← not in repo
-├── best.pt                 # PyTorch model fallback ← not in repo
-├── trafficDetector.db      # SQLite database ← not in repo
-├── templates/
-│   ├── dashboard.html
-│   ├── lookup.html
-│   ├── upload.html
-│   ├── progress.html
-│   ├── files.html
-│   └── results.html
-├── static/
-│   └── ...
-└── output/                 # Generated videos ← not in repo
+```text
+trf_tansam/
+├── app.py                      # Flask Application Factory (~34 lines)
+├── config.py                   # Central system configuration
+├── database.py                 # Unified SQLite manager with WAL mode
+├── init_db.py                  # Database initialization & default account seeding
+├── requirements.txt            # Pinned dependencies with CUDA 12.4 index
+│
+├── services/                   # Business Logic & Heavy Processing
+│   ├── auth_service.py         # Password hashing & @login_required decorator
+│   ├── analytics_service.py    # Query aggregations, metrics & time-window filters
+│   ├── detection_service.py    # Thread-safe background execution & live state tracker
+│   └── report_service.py       # In-memory PDF & Excel export engines
+│
+├── blueprints/                 # HTTP Presentation Layer (Routes & Controllers)
+│   ├── auth.py                 # /login, /logout, /register, /forgot-password
+│   ├── dashboard.py            # /, /site, /lookup
+│   ├── files.py                # /files, /delete_file, /video/<filename>
+│   ├── detection.py            # /upload, /progress, /progress/status
+│   └── reports.py              # /results, /download_pdf, /download_excel, /file_pdf, /file_excel
+│
+├── worker.py                   # Parallel chunk detection & automated post-processor
+├── test4_chunk.py              # YOLO / TensorRT chunk detection engine
+├── fix_count_overlay.py        # Video stitching & cumulative count card overlay
+│
+├── best.engine                 # TensorRT compiled YOLO model (fastest)
+├── best.pt                     # PyTorch model weights (resilient fallback)
+├── trafficDetector.db          # SQLite database (history & detections)
+│
+├── videos/                     # Storage folder for uploaded raw videos
+├── output/                     # Generated chunk & final annotated videos
+├── templates/                  # Bootstrap 5 HTML templates
+└── static/                     # CSS, JS, and branding images
 ```
 
 ---
 
-## 🖥️ UI Pages
+## 🖥️ UI Pages & Routes
 
 | Page | Route | Description |
 |---|---|---|
-| Dashboard | `/site` | Live vehicle counts + chart during processing |
-| Lookup | `/` | Search by date, time, camera, location |
-| Upload | `/upload` | Register a video for detection |
-| Progress | `/progress` | Live detection progress with chart |
-| Files | `/files` | All videos, counts, PDF/Excel download, delete |
-| Results | `/results` | Bar chart + breakdown per vehicle class |
+| **Login** | `/login` | Secure session authentication |
+| **Register** | `/register` | New user onboarding |
+| **Dashboard** | `/site` | Overview metrics, live status, and camera stats |
+| **Lookup** | `/lookup` | Filter detections by camera, location, date, and time |
+| **Upload** | `/upload` | Register a surveillance video for automated detection |
+| **Progress** | `/progress` | Real-time progress bar, vehicle breakdown, and chart |
+| **Files** | `/files` | Upload history, per-video counts, PDF/Excel downloads, deletion |
+| **Results** | `/results` | Aggregated bar charts and tabular vehicle breakdown |
 
 ---
 
@@ -113,77 +137,73 @@ trf/
 
 ### Prerequisites
 
-- Python 3.10+
-- NVIDIA GPU with CUDA support
-- TensorRT installed
-- FFmpeg installed (`winget install ffmpeg` on Windows)
+- **OS**: Windows 10/11 or Linux
+- **Python**: 3.10 or 3.11
+- **GPU**: NVIDIA GPU with CUDA support (e.g., RTX 3060 12GB)
+- **FFmpeg**: Installed and available in system PATH (`winget install ffmpeg` on Windows)
 
-### 1. Clone the Repository
+### 1. Clone & Enter Repository
 
 ```bash
 git clone https://github.com/yourusername/tn-highways-traffic-detection.git
 cd tn-highways-traffic-detection
 ```
 
-### 2. Install Python Dependencies
+### 2. Create Virtual Environment & Install Dependencies
 
 ```bash
-pip install flask opencv-python ultralytics torch torchvision \
-            tensorrt pycuda reportlab openpyxl
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# Install all dependencies (includes PyTorch CUDA and TensorRT)
+pip install -r requirements.txt
 ```
 
-### 3. Add Model Files
+### 3. Initialize Database & Default Accounts
 
-Download `best.engine` (TensorRT) and `best.pt` (PyTorch fallback) and place them in the project root.
+```bash
+python init_db.py
+```
 
-> Model files are not included in this repository due to size. Contact the project maintainer or see [Releases](#).
-
-### 4. Initialize the Database
-
-The database is created automatically on first run.
-
-### 5. Run the Flask App
+### 4. Run the Application
 
 ```bash
 python app.py
 ```
 
-Open `http://localhost:5000` in your browser.
+Open **`http://localhost:5000`** in your browser.
+
+---
+
+## 🔐 Default Login Credentials
+
+| Role | Username / Email | Password |
+|---|---|---|
+| **Admin** | `admin` *(or `admin@example.com`)* | `admin123` *(or `admin`)* |
+| **Operator** | `operator` *(or `operator@example.com`)* | `operator123` *(or `operator`)* |
+
+*(You can also register custom accounts at `/register`).*
 
 ---
 
 ## 📹 Processing a Video
 
-### Step 1 — Upload
-Go to `/upload`, enter the video filename, camera ID, location, and date/time.
-
-### Step 2 — Detection runs automatically
-Three parallel processes handle 0–20 min, 20–40 min, and 40–60 min chunks simultaneously. Monitor live on the `/progress` or `/site` dashboard.
-
-### Step 3 — Merge and overlay (manual)
-After detection completes, run:
-
-```bash
-python fix_count_overlay.py your_video.mp4
-```
-
-This merges the 3 chunks and renders the cumulative count overlay into `output/your_video_FINAL.mp4`.
-
-### Step 4 — View results
-Go to `/results` or `/files` to view counts, download reports, or play the annotated video.
+1. **Place Video**: Copy your video file (e.g. `highway_test.mp4`) into the **`videos/`** folder.
+2. **Start Detection**: Navigate to **`/upload`**, enter the filename (`highway_test.mp4`), Camera ID, Location, and Start Date/Time, and click **Start Detection**.
+3. **Monitor Live**: Watch detection progress and live count charts on **`/progress`** or **`/site`**.
+4. **Automatic Final Video**: Once all parallel chunks complete, the system **automatically** stitches them together and burns in the cumulative count card at `output/highway_test_FINAL.mp4`.
+5. **Download Reports**: Go to **`/files`** to view vehicle totals and download **PDF** or **Excel** reports.
 
 ---
 
-## ⏱️ Performance
+## ⏱️ Benchmark Performance (RTX 3060 12GB)
 
-| Configuration | 1-hour video processing time |
-|---|---|
-| Original sequential | ~1 hr 30 min |
-| 3 parallel chunks | ~20–25 min |
-| + overlay render | +2–3 min |
-| **Total** | **~25 min** |
+| Inference Backend | Latency | Frame Rate (FPS) | 1-Hour Video (90k frames) |
+|---|---|---|---|
+| **PyTorch (`best.pt`)** | ~28.5 ms | ~35 FPS | ~20–25 min (3 chunks) |
+| **TensorRT (`best.engine`)** | **4.34 ms** | **230.3 FPS** | **~6–8 min** (3 chunks) |
 
-**Speedup: ~3–4× faster than sequential processing**
+*Speedup: **~6.5× faster inference** using TensorRT FP16 Tensor Cores.*
 
 ---
 
@@ -191,40 +211,11 @@ Go to `/results` or `/files` to view counts, download reports, or play the annot
 
 | File | Description |
 |---|---|
-| `output/video_chunk1.mp4` | Chunk 1 annotated with bounding boxes |
-| `output/video_chunk2.mp4` | Chunk 2 annotated with bounding boxes |
-| `output/video_chunk3.mp4` | Chunk 3 annotated with bounding boxes |
-| `output/video_FINAL.mp4` | Merged full video with cumulative count overlay |
-| `trafficDetector.db` | All detections with timestamps |
-
----
-
-## 🔧 Troubleshooting
-
-**Processing stuck at PROCESSING status after a crash:**
-
-```sql
-UPDATE videos SET status='FAILED' WHERE status='PROCESSING';
-```
-
-Run this in DB Browser for SQLite or via Python's `sqlite3` module.
-
-**TensorRT engine not loading:**
-The system automatically falls back to `best.pt` (PyTorch). Re-compile the engine with:
-```bash
-yolo export model=best.pt format=engine device=0
-```
-
----
-
-## 🔐 Login
-
-Default credentials (change before production deployment):
-
-| Role | Username | Password |
-|---|---|---|
-| Admin | `admin` | _(set in app.py)_ |
-| Operator | `operator` | _(set in app.py)_ |
+| `output/<name>_chunk1.mp4` | Chunk 1 annotated with bounding boxes and tracking IDs |
+| `output/<name>_chunk2.mp4` | Chunk 2 annotated with bounding boxes and tracking IDs |
+| `output/<name>_chunk3.mp4` | Chunk 3 annotated with bounding boxes and tracking IDs |
+| `output/<name>_FINAL.mp4` | Stitched full video with high-contrast cumulative count card |
+| `trafficDetector.db` | SQLite database storing all vehicle timestamp detections |
 
 ---
 
@@ -236,7 +227,6 @@ This project was developed for the **Tamil Nadu Highways Department**. All right
 
 ## 👤 Author
 
-Developed by ** Roshan Joel K**
-Tamil Nadu Highways Department — Traffic Monitoring Division
-
-> For queries, contact: joelrj700@gmail.com
+Developed by **Joel Roshan**  
+Upgraded by **Gurucharan**  
+**TANSAM**
